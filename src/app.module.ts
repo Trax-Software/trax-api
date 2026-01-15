@@ -5,6 +5,7 @@ import { envSchema } from './config/env.validation';
 import { DatabaseModule } from './database/database.module';
 import { IamModule } from './modules/iam/iam.module'; 
 import { CampaignsModule } from './modules/campaigns/campaigns.module';
+import { AiModule } from './modules/ai/ai.module';
 
 @Module({
   imports: [
@@ -25,7 +26,8 @@ import { CampaignsModule } from './modules/campaigns/campaigns.module';
 
     DatabaseModule,
     IamModule, 
-    CampaignsModule
+    CampaignsModule,
+    AiModule
   ],
 })
 export class AppModule {}

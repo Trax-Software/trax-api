@@ -169,52 +169,6 @@ A integração com provedores de IA deve ficar isolada em um módulo/serviço de
 
 ---
 
-## 🔁 CI (GitHub Actions)
-
-Crie o workflow em: `.github/workflows/ci.yml`
-
-```yaml
-name: CI Pipeline
-
-on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Use Node.js 20
-        uses: actions/setup-node@v3
-        with:
-          node-version: 20
-          cache: 'npm'
-
-      - name: Install Dependencies
-        run: npm ci
-
-      - name: Generate Prisma Client
-        run: npx prisma generate
-
-      - name: Build Project
-        run: npm run build
-
-      # Futuro: Adicionar 'npm run test' aqui quando tivermos testes
-```
-
----
-
-## 📄 Licença
-
-Defina a licença do projeto (ex.: MIT) ou remova esta seção, conforme a política do repositório.
-
----
-
 ## 👥 Time
 
 **Trax Engineering Team**
