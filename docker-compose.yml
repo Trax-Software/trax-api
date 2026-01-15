@@ -1,0 +1,29 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: trax_postgres
+    environment:
+      POSTGRES_USER: trax_user
+      POSTGRES_PASSWORD: trax_password
+      POSTGRES_DB: trax_db
+    ports:
+      - "5432:5432" # ⚠️ Garanta que é 5432 aqui
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck: # Adicionei healthcheck para garantir que o banco está pronto
+      test: ["CMD-SHELL", "pg_isready -U trax_user -d trax_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: trax_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+volumes:
+  postgres_data:
+  redis_data:

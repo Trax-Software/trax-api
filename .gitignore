@@ -1,0 +1,26 @@
+# Compilação
+/dist
+/build
+
+# Dependências
+/node_modules
+
+# Segurança e Ambiente (CRÍTICO)
+.env
+.env.production
+.env.development
+.env.local
+.DS_Store
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pino-logger.log
+
+# Coverage de Testes
+/coverage
+
+# IDEs
+/.vscode
+/.idea

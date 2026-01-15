@@ -1,0 +1,97 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ENUMS
+enum Role {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+// MODELS
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String   // Hash argon2/bcrypt
+  name      String?
+  
+  // Auditoria
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relacionamentos
+  workspaces WorkspaceMember[]
+
+  @@map("users")
+}
+
+model Workspace {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  
+  // Auditoria
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relacionamentos
+  members     WorkspaceMember[]
+  campaigns Campaign[]
+  
+  @@map("workspaces")
+}
+
+enum CampaignObjective {
+  AWARENESS
+  TRAFFIC
+  SALES
+  LEADS
+}
+
+model Campaign {
+  id          String            @id @default(uuid())
+  name        String
+  objective   CampaignObjective
+  description String?           
+  
+  // Multi-tenancy: Toda campanha pertence a um workspace
+  workspaceId String
+  workspace   Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  
+  // Auditoria: Quem criou?
+  createdBy   String
+  
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@index([workspaceId])
+  @@map("campaigns")
+}
+
+// Tabela Pivô (Many-to-Many) com metadados (Role)
+model WorkspaceMember {
+  id          String    @id @default(uuid())
+  role        Role      @default(MEMBER)
+  
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  createdAt   DateTime  @default(now())
+
+  @@unique([userId, workspaceId]) // Um usuário não pode entrar 2x no mesmo workspace
+  @@index([userId])
+  @@index([workspaceId])
+  @@map("workspace_members")
+}
