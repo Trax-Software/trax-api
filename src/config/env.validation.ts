@@ -16,4 +16,5 @@ export const envSchema = Joi.object({
   // Security
   JWT_SECRET: Joi.string().required().min(32), // Força segredo forte
   API_KEY_OPENAI: Joi.string().required(), // Já preparando terreno
+  ENCRYPTION_KEY: Joi.string().required().length(64),
 });

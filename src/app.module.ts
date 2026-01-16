@@ -6,6 +6,8 @@ import { DatabaseModule } from './database/database.module';
 import { IamModule } from './modules/iam/iam.module'; 
 import { CampaignsModule } from './modules/campaigns/campaigns.module';
 import { AiModule } from './modules/ai/ai.module';
+import { SecurityModule } from './modules/security/security.module';
+import { IntegrationsModule } from './modules/integrations/integrations.module';
 
 @Module({
   imports: [
@@ -27,7 +29,9 @@ import { AiModule } from './modules/ai/ai.module';
     DatabaseModule,
     IamModule, 
     CampaignsModule,
-    AiModule
+    AiModule,
+    SecurityModule,
+    IntegrationsModule,
   ],
 })
 export class AppModule {}
