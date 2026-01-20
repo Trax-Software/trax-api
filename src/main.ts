@@ -5,6 +5,8 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 // import helmet from 'helmet'; // <--- COMENTADO PROPOSITALMENTE
 import { Logger } from 'nestjs-pino';
 
+import * as basicAuth from 'express-basic-auth';
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
   
@@ -35,6 +37,20 @@ async function bootstrap() {
       },
     }),
   );
+
+  const SWAGGER_ENVS = ['production', 'staging', 'development']; // Adicionei development para você testar agora
+  
+  if (SWAGGER_ENVS.includes(process.env.NODE_ENV || 'development')) {
+    app.use(
+      ['/docs', '/docs-json'],
+      basicAuth({
+        challenge: true,
+        users: {
+          [process.env.SWAGGER_USER || 'admin']: process.env.SWAGGER_PASSWORD || 'admin123',
+        },
+      }),
+    );
+  }
 
   const config = new DocumentBuilder()
     .setTitle('Trax API')
