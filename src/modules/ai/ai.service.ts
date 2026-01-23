@@ -2,12 +2,14 @@ import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { AI_PROVIDER, AiProvider } from './interfaces/ai-provider.interface';
 import { PrismaService } from '../../database/prisma.service';
 import { ActiveUserData } from '../iam/authentication/decorators/active-user.decorator';
+import { StorageService } from '../storage/storage.service';
 
 @Injectable()
 export class AiService {
   constructor(
     @Inject(AI_PROVIDER) private readonly aiProvider: AiProvider,
     private readonly prisma: PrismaService,
+    private readonly storage: StorageService
   ) {}
 
   async generateCampaignCopy(
@@ -78,10 +80,17 @@ export class AiService {
 
     if (!member) throw new NotFoundException('Workspace não encontrado');
 
-    // 1. Chama o Provider para gerar a imagem (Base64)
-    const imageBase64 = await this.aiProvider.generateImage(imagePrompt);
+    // 1. Gera a imagem (Vem em Base64 puro)
+    const base64Image = await this.aiProvider.generateImage(imagePrompt);
+    
+    // 2. Converte Base64 para Buffer
+    const imageBuffer = Buffer.from(base64Image, 'base64');
 
-    // 2. Log de Imagem (Custo estimado ou fixo)
+    // 3. Upload para o R2 (S3) 🚀
+    const fileName = `ai-gen-${Date.now()}.png`;
+    const publicUrl = await this.storage.uploadFile(imageBuffer, fileName, 'image/png');
+
+    // 4. Salva Log no Banco
     await this.prisma.aiLog.create({
       data: {
         userId: user.sub,
@@ -89,15 +98,16 @@ export class AiService {
         provider: 'GOOGLE_IMAGEN',
         model: 'imagen-3.0-generate-001',
         type: 'IMAGE_GENERATION',
-        inputTokens: imagePrompt.length, // Estimativa
-        outputTokens: 1, // 1 imagem
+        inputTokens: imagePrompt.length,
+        outputTokens: 1,
         totalTokens: imagePrompt.length + 1,
       },
     });
 
+    // 5. Retorna a URL pública em vez do base64 gigante
     return { 
-      message: 'Imagem gerada com sucesso',
-      image: `data:image/png;base64,${imageBase64}` 
+      message: 'Imagem gerada e salva com sucesso',
+      imageUrl: publicUrl 
     };
   }
 }
