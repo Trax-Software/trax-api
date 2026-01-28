@@ -110,4 +110,51 @@ export class AiService {
       imageUrl: publicUrl 
     };
   }
+
+  // --- NOVO: GERA OPÇÕES ESTRATÉGICAS ---
+  async generateStrategyOptions(campaignId: string, user: ActiveUserData) {
+    const campaign = await this.prisma.campaign.findUnique({
+      where: { id: campaignId },
+    });
+
+    if (!campaign) throw new NotFoundException('Campanha não encontrada');
+
+    // Prompt de Engenharia Avançada para Marketing
+    const prompt = `
+      ATUE COMO: O maior estrategista de marketing digital do mundo.
+      PRODUTO/SERVIÇO: "${campaign.name}"
+      OBJETIVO: "${campaign.objective}"
+      DESCRIÇÃO EXTRA: "${campaign.description || 'Nenhuma'}"
+
+      TAREFA:
+      Analise este produto e crie 3 ABORDAGENS ESTRATÉGICAS DISTINTAS (Personas/Ângulos) para uma campanha de anúncios.
+      
+      SAÍDA OBRIGATÓRIA: Apenas um ARRAY JSON puro (sem markdown, sem texto antes ou depois).
+      Estrutura do JSON:
+      [
+        {
+          "title": "Nome curto da estratégia (ex: Foco em Performance)",
+          "targetAudience": "Descrição detalhada do público-alvo",
+          "keyBenefits": "Lista de 3 benefícios chave focados nessa persona",
+          "brandTone": "Tom de voz ideal (ex: Enérgico, Sério, Humorístico)",
+          "reasoning": "Por que essa estratégia vai vender?"
+        }
+      ]
+    `;
+
+    const response = await this.aiProvider.generateText(prompt, { 
+      temperature: 0.7, 
+      maxTokens: 2000 
+    });
+
+    // Limpeza básica do JSON (caso a IA mande markdown ```json ... ```)
+    const cleanJson = response.content.replace(/```json|```/g, '').trim();
+    
+    try {
+      return JSON.parse(cleanJson);
+    } catch (e) {
+      // Fallback robusto se o JSON vier quebrado
+      return { error: 'Falha ao gerar estratégias. Tente novamente.', raw: response.content };
+    }
+  }
 }
