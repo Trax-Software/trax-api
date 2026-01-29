@@ -1,0 +1,115 @@
+{
+	"info": {
+		"name": "Trax SaaS - Marketing AI",
+		"description": "API de Automação de Marketing com processamento assíncrono (BullMQ) e Soft Delete.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "01. Authentication",
+			"item": [
+				{
+					"name": "Sign Up",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"ceo@trax.com.br\",\n    \"password\": \"Sup3rS3cr3t!\",\n    \"name\": \"Thiago Ribeiro\"\n}",
+							"options": { "raw": { "language": "json" } }
+						},
+						"url": "{{baseUrl}}/auth/sign-up"
+					}
+				},
+				{
+					"name": "Sign In",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const response = pm.response.json();",
+									"if (response.accessToken) {",
+									"    pm.environment.set(\"jwt_token\", response.accessToken);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"ceo@trax.com.br\",\n    \"password\": \"Sup3rS3cr3t!\"\n}",
+							"options": { "raw": { "language": "json" } }
+						},
+						"url": "{{baseUrl}}/auth/sign-in"
+					}
+				}
+			]
+		},
+		{
+			"name": "02. Campaigns",
+			"item": [
+				{
+					"name": "Create Campaign (Draft)",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Black Friday 2026\",\n    \"objective\": \"SALES\",\n    \"description\": \"Campanha focada em calçados esportivos\"\n}",
+							"options": { "raw": { "language": "json" } }
+						},
+						"url": "{{baseUrl}}/campaigns"
+					}
+				},
+				{
+					"name": "List Active Campaigns",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": "{{baseUrl}}/campaigns"
+					}
+				}
+			]
+		},
+		{
+			"name": "03. AI Engine (BullMQ)",
+			"item": [
+				{
+					"name": "Generate Image (Async)",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"prompt\": \"Cinematic shot of a futuristic running shoe, neon lights, 8k resolution, highly detailed\",\n    \"campaignId\": \"COLOCAR_ID_AQUI\"\n}",
+							"options": { "raw": { "language": "json" } }
+						},
+						"url": "{{baseUrl}}/ai/generate-image"
+					}
+				}
+			]
+		}
+	],
+	"auth": {
+		"type": "bearer",
+		"bearer": [
+			{
+				"key": "token",
+				"value": "{{jwt_token}}",
+				"type": "string"
+			}
+		]
+	},
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:3000/v1",
+			"type": "string"
+		}
+	]
+}
