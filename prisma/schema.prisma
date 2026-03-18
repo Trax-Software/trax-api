@@ -42,13 +42,13 @@ enum AdPlatform {
 // --- MODELS DE USUÁRIO E ORGANIZAÇÃO ---
 
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  password  String
-  name      String?
+  id       String  @id @default(uuid())
+  email    String  @unique
+  password String
+  name     String?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
   deletedAt DateTime? // Auditoria: Soft Delete
 
   workspaces WorkspaceMember[]
@@ -58,48 +58,48 @@ model User {
 }
 
 model Workspace {
-  id          String   @id @default(uuid())
-  name        String   // Nome interno do Workspace
+  id          String  @id @default(uuid())
+  name        String // Nome interno do Workspace
   description String?
 
   // --- BRAND DNA (Novo) ---
-  brandName       String?   // Nome da Marca para a IA usar nos textos
-  brandVoice      String?   // ex: "Corporativo", "Jovial", "Agressivo"
-  brandColors     String[]  // Array de Strings: ["#FF0000", "#000000"]
-  brandLogoUrl    String?   @db.Text
-  brandWebsite    String?
+  brandName    String? // Nome da Marca para a IA usar nos textos
+  brandVoice   String? // ex: "Corporativo", "Jovial", "Agressivo"
+  brandColors  String[] // Array de Strings: ["#FF0000", "#000000"]
+  brandLogoUrl String?  @db.Text
+  brandWebsite String?
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  deletedAt   DateTime? 
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
 
   members      WorkspaceMember[]
   campaigns    Campaign[]
   aiLogs       AiLog[]
   integrations Integration[]
-  
+
   // Adicione este campo se formos implementar o sistema de créditos do Card 3 depois
-  credits      Int      @default(10) 
-  
+  credits Int @default(10000)
+
   @@map("workspaces")
 }
 
 // Procure pelo model WorkspaceMember e adicione a linha abaixo:
 
 model WorkspaceMember {
-  id          String    @id @default(uuid())
-  role        Role      @default(MEMBER)
-  
-  userId      String
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  id   String @id @default(uuid())
+  role Role   @default(MEMBER)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
-  createdAt   DateTime  @default(now())
-  
+  createdAt DateTime @default(now())
+
   // 👇 ADICIONE ESTA LINHA 👇
-  deletedAt   DateTime? 
+  deletedAt DateTime?
 
   @@unique([userId, workspaceId])
   @@index([userId])
@@ -110,54 +110,72 @@ model WorkspaceMember {
 // --- MODELS PRINCIPAIS ---
 
 model Campaign {
-  id              String            @id @default(uuid())
-  name            String
-  objective       CampaignObjective
-  platform        AdPlatform        @default(META)
-  
-  targetAudience  String?           @db.Text
-  keyBenefits     String?           @db.Text
-  brandTone       String?
-  
-  status          CampaignStatus    @default(DRAFT)
-  description     String?           @db.Text
+  id        String            @id @default(uuid())
+  name      String
+  objective CampaignObjective
+  platform  AdPlatform        @default(META)
 
-  workspaceId     String
-  workspace       Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  
-  createdBy       String 
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
-  deletedAt       DateTime?         // Auditoria: Soft Delete
+  // --- Estratégia / Público ---
+  targetAudience String? @db.Text
+  keyBenefits    String? @db.Text
+  brandTone      String?
 
-  adCreatives     AdCreative[]
+  status      CampaignStatus @default(DRAFT)
+  description String?        @db.Text
+
+  // --- Produto ---
+  productName          String?
+  productCategory      String?
+  productPrice         Float?
+  productOriginalPrice Float?   // Para calcular % de desconto
+  productUrl           String? @db.Text
+  productUsp           String? @db.Text  // Unique Selling Proposition
+
+  // --- Oferta (gatilho de conversão) ---
+  offerType     String?   // "DISCOUNT" | "FREE_SHIPPING" | "BONUS" | "GUARANTEE"
+  offerDeadline DateTime?
+  ctaText       String?   // ex: "Compre Agora", "Garanta a Oferta"
+
+  // --- Orçamento ---
+  budgetDaily Float?
+  budgetTotal Float?
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  createdBy String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? // Auditoria: Soft Delete
+
+  adCreatives AdCreative[]
 
   @@index([workspaceId])
-  @@index([deletedAt]) // Índice para performance de queries filtradas
+  @@index([deletedAt])
   @@map("campaigns")
 }
 
 model AdCreative {
-  id           String   @id @default(uuid())
-  name         String
-  
-  imageUrl     String?  @db.Text
-  videoUrl     String?  @db.Text
-  
-  headline     String?  @db.Text
-  primaryText  String?  @db.Text
-  
-  aiModel      String?
-  isSelected   Boolean  @default(false)
-  
+  id   String @id @default(uuid())
+  name String
+
+  imageUrl String? @db.Text
+  videoUrl String? @db.Text
+
+  headline    String? @db.Text
+  primaryText String? @db.Text
+
+  aiModel    String?
+  isSelected Boolean @default(false)
+
   facebookAdId String?
 
-  campaignId   String
-  campaign     Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  campaignId String
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  deletedAt    DateTime? // Auditoria: Soft Delete
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? // Auditoria: Soft Delete
 
   @@index([campaignId])
   @@index([deletedAt])
@@ -167,22 +185,22 @@ model AdCreative {
 // --- LOGS E INTEGRAÇÕES ---
 
 model AiLog {
-  id           String   @id @default(uuid())
-  workspaceId  String
-  userId       String
-  
-  provider     String   
-  model        String   
-  type         String   
-  
+  id          String @id @default(uuid())
+  workspaceId String
+  userId      String
+
+  provider String
+  model    String
+  type     String
+
   inputTokens  Int
   outputTokens Int
   totalTokens  Int
-  
-  createdAt    DateTime @default(now())
 
-  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId])
   @@index([userId])
@@ -190,23 +208,23 @@ model AiLog {
 }
 
 model Integration {
-  id           String   @id @default(uuid())
-  workspaceId  String
-  
-  provider     String   
-  externalId   String   
-  name         String   
-  
-  accessToken  String   @db.Text 
-  refreshToken String?  @db.Text
-  
-  status       String   @default("ACTIVE")
-  
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  deletedAt    DateTime? // Auditoria: Soft Delete
+  id          String @id @default(uuid())
+  workspaceId String
 
-  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  provider   String
+  externalId String
+  name       String
+
+  accessToken  String  @db.Text
+  refreshToken String? @db.Text
+
+  status String @default("ACTIVE")
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? // Auditoria: Soft Delete
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, provider, externalId])
   @@index([deletedAt])

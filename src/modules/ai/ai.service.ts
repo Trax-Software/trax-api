@@ -1,12 +1,26 @@
-import { Inject, Injectable, NotFoundException, Logger } from '@nestjs/common';
-import { AI_PROVIDER, AiProvider } from './interfaces/ai-provider.interface';
+import {
+  HttpException,
+  HttpStatus,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException
+} from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { ActiveUserData } from '../iam/authentication/decorators/active-user.decorator';
 import { StorageService } from '../storage/storage.service';
+import { AI_PROVIDER, AiProvider } from './interfaces/ai-provider.interface';
 
 @Injectable()
 export class AiService {
   private readonly logger = new Logger(AiService.name);
+
+  // 💰 Tabela de Custos (Estimativa: 1 Crédito = 1 Token)
+  // Ajuste os valores conforme sua estratégia de precificação
+  private readonly COSTS = {
+    IMAGE_FIXED: 2000,     // Custo fixo para 1 imagem (equivale a 2000 tokens de texto)
+    MIN_TOKEN_BALANCE: 100 // Saldo mínimo para o usuário tentar qualquer operação
+  };
 
   constructor(
     @Inject(AI_PROVIDER) private readonly aiProvider: AiProvider,
@@ -14,200 +28,225 @@ export class AiService {
     private readonly storage: StorageService
   ) {}
 
+  // ===========================================================================
+  // 🔒 MÉTODOS PRIVADOS (Core Financeiro e Contextual)
+  // ===========================================================================
+
   /**
-   * Constrói o "System Prompt" com o DNA da marca do Workspace.
-   * Isso garante que a IA nunca saia do personagem ou do tom de voz da empresa.
+   * 1. Check de Saldo (Pré-voo):
+   * Garante que o usuário tem o mínimo necessário antes de gastarmos API.
+   */
+  private async ensureBalance(workspaceId: string, minRequired: number) {
+    const workspace = await this.prisma.workspace.findUnique({
+      where: { id: workspaceId },
+      select: { credits: true }
+    });
+
+    if (!workspace || workspace.credits < minRequired) {
+      throw new HttpException(
+        `Saldo insuficiente. Você tem ${workspace?.credits || 0} tokens, mas precisa de no mínimo ${minRequired} para esta operação.`,
+        HttpStatus.PAYMENT_REQUIRED // 402
+      );
+    }
+  }
+
+  /**
+   * 2. Cobrança Real (Pós-voo):
+   * Desconta do banco a quantidade exata que a IA consumiu.
+   */
+  private async deductUsage(workspaceId: string, amount: number) {
+    const updated = await this.prisma.workspace.update({
+      where: { id: workspaceId },
+      data: { credits: { decrement: amount } },
+      select: { credits: true }
+    });
+    this.logger.log(`📉 Consumo: -${amount} tokens | Workspace: ${workspaceId} | Restante: ${updated.credits}`);
+  }
+
+  /**
+   * 3. Brand DNA (O Cérebro):
+   * Monta o System Prompt com a identidade da marca.
    */
   private async buildSystemPrompt(workspaceId: string): Promise<string> {
-    const workspace = await this.prisma.extended.workspace.findUnique({
+    const workspace = await this.prisma.workspace.findUnique({
       where: { id: workspaceId },
       select: { brandName: true, brandVoice: true, brandColors: true }
     });
 
     const brandName = workspace?.brandName || 'nossa marca';
-    const voice = workspace?.brandVoice || 'Profissional, Persuasivo e Moderno';
-    const colors = workspace?.brandColors?.join(', ') || 'Cores padrão da marca';
+    const voice = workspace?.brandVoice || 'Profissional e Persuasivo';
+    const colors = workspace?.brandColors?.join(', ') || 'Cores padrão';
 
     return `
       ATUE COMO: Um Diretor de Criação Sênior e Estrategista da marca "${brandName}".
       
-      💎 BRAND DNA (DIRETRIZES INEGOCIÁVEIS):
+      💎 BRAND DNA (Contexto da Marca):
       - Tom de Voz: ${voice}
       - Identidade Visual: O mood deve harmonizar com as cores [${colors}].
-      - Objetivo: Criar conteúdo de alta conversão que respeite a identidade da marca.
-      - Restrições: Evite clichês genéricos, linguagem ofensiva ou promessas falsas.
+      - Objetivo: Criar conteúdo de alta conversão.
+      
+      REGRAS: Mantenha-se fiel a este DNA em todas as respostas.
     `;
   }
 
+  // ===========================================================================
+  // 🚀 MÉTODOS PÚBLICOS (Funcionalidades Completas)
+  // ===========================================================================
+
   /**
-   * Gera copies persuasivas para anúncios (Headline + Texto Principal).
-   * Agora enriquecido com o contexto da marca.
+   * Gera Copy (Texto) para Campanhas.
+   * ✅ Brand DNA
+   * ✅ Cobrança por Token (Input + Output)
+   * ✅ Log de Auditoria
    */
-  async generateCampaignCopy(
-    productName: string, 
-    objective: string, 
-    user: ActiveUserData
-  ) {
-    // 1. Validação de Tenant e Busca de Contexto
-    const member = await this.prisma.extended.workspaceMember.findFirst({
+  async generateCampaignCopy(productName: string, objective: string, user: ActiveUserData) {
+    const member = await this.prisma.workspaceMember.findFirst({
       where: { userId: user.sub },
       select: { workspaceId: true },
     });
-
     if (!member) throw new NotFoundException('Workspace não encontrado');
 
+    // A. Verifica Saldo Mínimo
+    await this.ensureBalance(member.workspaceId, this.COSTS.MIN_TOKEN_BALANCE);
+
+    // B. Prepara Contexto
     const systemPrompt = await this.buildSystemPrompt(member.workspaceId);
-
     const userPrompt = `
-      CONTEXTO DA CAMPANHA:
-      Produto/Serviço: "${productName}"
-      Objetivo: "${objective}"
-
-      SUA MISSÃO:
-      1. Escreva 3 opções de Headlines curtas e impactantes.
-      2. Escreva 1 Texto Principal (Primary Text) focado em conversão, usando gatilhos mentais.
-      3. Descreva 1 Ideia Visual (Image Prompt) detalhada para um designer ou IA generativa.
-
-      FORMATO DE SAÍDA (MARKDOWN):
-      ## ⚡ Opções de Headline
-      1. ...
-      2. ...
-      3. ...
-
-      ## 📝 Corpo do Anúncio
-      ...
-
-      ## 🎨 Briefing Visual (Prompt em Inglês)
-      ...
+      CONTEXTO: Produto: "${productName}". Objetivo: "${objective}".
+      TAREFA: Crie 3 Headlines, 1 Texto Principal e 1 Briefing de Imagem.
+      FORMATO: Markdown.
     `;
+    const finalPrompt = `${systemPrompt}\n\n${userPrompt}`;
 
-    const finalPrompt = `${systemPrompt}\n\n---\n\n${userPrompt}`;
-
-    // 2. Chamada à IA
+    // C. Gera com IA
     const response = await this.aiProvider.generateText(finalPrompt, { 
-      temperature: 0.8,
+      temperature: 0.8, 
       maxTokens: 2000 
     });
 
-    // 3. Auditoria de Custos (Log)
-    await this.prisma.extended.aiLog.create({
+    // D. Cobra o Custo Real
+    const totalTokens = response.usage.totalTokens;
+    await this.deductUsage(member.workspaceId, totalTokens);
+
+    // E. Salva Log
+    await this.prisma.aiLog.create({
       data: {
         userId: user.sub,
         workspaceId: member.workspaceId,
-        provider: 'GEMINI', // Ou dinâmico dependendo do provider injetado
+        provider: 'GEMINI',
         model: 'gemini-2.0-flash',
         type: 'COPY_GENERATION',
         inputTokens: response.usage.inputTokens,
         outputTokens: response.usage.outputTokens,
-        totalTokens: response.usage.totalTokens,
+        totalTokens: totalTokens,
       },
     });
 
-    return { result: response.content };
+    return { result: response.content, cost: totalTokens };
   }
 
   /**
-   * Gera imagens usando modelos DALL-E 3 ou Imagen.
-   * Este método é chamado principalmente pelos Workers do BullMQ.
+   * Gera Imagens.
+   * ✅ Injeção de Cores da Marca (Novo!)
+   * ✅ Cobrança Fixa
+   * ✅ Upload para Cloudflare R2
    */
   async generateCampaignImage(imagePrompt: string, user: ActiveUserData) {
-    const member = await this.prisma.extended.workspaceMember.findFirst({
+    const member = await this.prisma.workspaceMember.findFirst({
       where: { userId: user.sub },
       select: { workspaceId: true },
     });
-
     if (!member) throw new NotFoundException('Workspace não encontrado');
 
-    this.logger.log(`🎨 Iniciando geração de imagem para User: ${user.sub}`);
+    // A. Verifica Saldo (Custo Fixo)
+    await this.ensureBalance(member.workspaceId, this.COSTS.IMAGE_FIXED);
 
-    // 1. Geração (Base64)
-    const base64Image = await this.aiProvider.generateImage(imagePrompt);
-    
-    // 2. Processamento de Buffer
+    // B. Enriquece Prompt com Cores (Brand DNA Visual)
+    const workspace = await this.prisma.workspace.findUnique({
+      where: { id: member.workspaceId },
+      select: { brandColors: true }
+    });
+    const colorContext = workspace?.brandColors?.length 
+      ? ` Utilize a paleta de cores da marca: ${workspace.brandColors.join(', ')}.` 
+      : '';
+    const finalPrompt = `${imagePrompt}.${colorContext} Alta resolução, estilo profissional.`;
+
+    // C. Gera Imagem
+    this.logger.log(`🎨 Gerando imagem para: ${user.email}`);
+    const base64Image = await this.aiProvider.generateImage(finalPrompt);
     const imageBuffer = Buffer.from(base64Image, 'base64');
-
-    // 3. Upload para Object Storage (R2/S3)
+    
+    // D. Upload para Storage (R2)
     const fileName = `ai-gen-${Date.now()}.png`;
     const publicUrl = await this.storage.uploadFile(imageBuffer, fileName, 'image/png');
 
-    // 4. Log de Auditoria
-    // Nota: IAs de imagem cobram por unidade, mas registramos tokens para padronização
-    await this.prisma.extended.aiLog.create({
+    // E. Cobra Custo Fixo
+    await this.deductUsage(member.workspaceId, this.COSTS.IMAGE_FIXED);
+
+    // F. Salva Log
+    await this.prisma.aiLog.create({
       data: {
         userId: user.sub,
         workspaceId: member.workspaceId,
         provider: 'GOOGLE_IMAGEN',
-        model: 'imagen-3.0-generate-001',
+        model: 'imagen-4.0',
         type: 'IMAGE_GENERATION',
-        inputTokens: imagePrompt.length,
-        outputTokens: 1, // 1 imagem
-        totalTokens: imagePrompt.length + 1,
+        inputTokens: finalPrompt.length,
+        outputTokens: 1,
+        totalTokens: this.COSTS.IMAGE_FIXED,
       },
     });
 
     return { 
-      message: 'Imagem gerada e salva com sucesso',
-      imageUrl: publicUrl 
+      message: 'Imagem gerada com sucesso',
+      imageUrl: publicUrl,
+      cost: this.COSTS.IMAGE_FIXED
     };
   }
 
   /**
-   * Gera opções estratégicas (Personas/Ângulos) para a campanha.
-   * Fundamental para a etapa "Strategy Engine" do frontend.
+   * Gera Estratégia (Brainstorm).
+   * ✅ Brand DNA
+   * ✅ Cobrança por Token
+   * ✅ Parse de JSON Resiliente
    */
   async generateStrategyOptions(campaignId: string, user: ActiveUserData) {
-    const campaign = await this.prisma.extended.campaign.findUnique({
+    const campaign = await this.prisma.campaign.findUnique({
       where: { id: campaignId },
       include: { workspace: true }
     });
-
     if (!campaign) throw new NotFoundException('Campanha não encontrada');
 
-    // 1. Injeção de Contexto (Brand DNA)
+    // A. Verifica Saldo
+    await this.ensureBalance(campaign.workspaceId, this.COSTS.MIN_TOKEN_BALANCE);
+
+    // B. Prepara Prompt (Com Brand DNA)
     const systemPrompt = await this.buildSystemPrompt(campaign.workspaceId);
-
-    // 2. Prompt Estruturado
     const userPrompt = `
-      PRODUTO/SERVIÇO: "${campaign.name}"
-      OBJETIVO DE CAMPANHA: "${campaign.objective}"
-      PLATAFORMA: "${campaign.platform}"
-      DESCRIÇÃO ADICIONAL: "${campaign.description || 'Nenhuma'}"
-
-      TAREFA:
-      Analise os dados acima e crie 3 ABORDAGENS ESTRATÉGICAS DISTINTAS (Ângulos Criativos).
-      
-      REGRAS:
-      - Respeite estritamente o Tom de Voz da marca definido anteriormente.
-      - Foque em resultados de performance (Growth).
-
-      SAÍDA OBRIGATÓRIA: Apenas um ARRAY JSON puro (sem markdown).
-      Estrutura do JSON:
-      [
-        {
-          "title": "Nome curto da estratégia (ex: Foco em Dor)",
-          "targetAudience": "Descrição detalhada do público-alvo (Persona)",
-          "keyBenefits": "Lista de 3 benefícios chave para esta persona",
-          "brandTone": "Como o tom da marca se aplica especificamente aqui",
-          "reasoning": "Por que esta estratégia vai converter?"
-        }
-      ]
+      PRODUTO: "${campaign.name}". OBJETIVO: "${campaign.objective}". 
+      PLATAFORMA: "${campaign.platform}". DESCRIÇÃO: "${campaign.description}".
+      TAREFA: Gere 3 personas/ângulos estratégicos.
+      FORMATO: JSON Array puro [ { "title": "...", "targetAudience": "...", ... } ].
     `;
+    const finalPrompt = `${systemPrompt}\n\n${userPrompt}`;
 
-    const finalPrompt = `${systemPrompt}\n\n---\n\n${userPrompt}`;
-
+    // C. Gera com IA
     const response = await this.aiProvider.generateText(finalPrompt, { 
       temperature: 0.7, 
       maxTokens: 2500 
     });
 
-    // 3. Sanitização e Parse do JSON
+    // D. Cobra Custo Real
+    const totalTokens = response.usage.totalTokens;
+    await this.deductUsage(campaign.workspaceId, totalTokens);
+
+    // E. Processa JSON e Loga
     const cleanJson = response.content.replace(/```json|```/g, '').trim();
     
     try {
       const strategies = JSON.parse(cleanJson);
       
-      // Log do sucesso estratégico
-      await this.prisma.extended.aiLog.create({
+      await this.prisma.aiLog.create({
         data: {
           userId: user.sub,
           workspaceId: campaign.workspaceId,
@@ -216,16 +255,16 @@ export class AiService {
           type: 'STRATEGY_GENERATION',
           inputTokens: response.usage.inputTokens,
           outputTokens: response.usage.outputTokens,
-          totalTokens: response.usage.totalTokens,
+          totalTokens: totalTokens,
         },
       });
 
       return strategies;
     } catch (e) {
-      this.logger.error('Falha ao fazer parse da estratégia gerada pela IA', e);
-      // Fallback robusto retornando o texto cru para debug se necessário
+      this.logger.error('Erro de Parse JSON IA', e);
+      // Cobramos mesmo com erro de parse, pois a IA trabalhou. Retornamos o raw para debug.
       return { 
-        error: 'A IA gerou uma resposta válida, mas fora do formato JSON esperado.', 
+        error: 'A IA gerou uma resposta, mas o formato JSON falhou.', 
         rawContent: response.content 
       };
     }

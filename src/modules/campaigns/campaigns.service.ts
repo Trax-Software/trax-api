@@ -42,14 +42,21 @@ export class CampaignsService {
 
     if (!targetWorkspaceId) throw new ForbiddenException('Workspace inválido');
 
-    return this.prisma.extended.campaign.create({
-      data: {
-        ...createCampaignDto,
-        workspaceId: targetWorkspaceId,
-        createdBy: user.sub,
-        status: CampaignStatus.DRAFT,
-      },
-    });
+    const data: any = {
+      ...createCampaignDto,
+      workspaceId: targetWorkspaceId,
+      createdBy: user.sub,
+      status: CampaignStatus.DRAFT,
+    };
+
+    // Ajuste de data (Prisma exige ISO format se for string)
+    if (data.offerDeadline && typeof data.offerDeadline === 'string' && data.offerDeadline.length === 10) {
+      data.offerDeadline = new Date(data.offerDeadline).toISOString();
+    } else if (data.offerDeadline === "") {
+      data.offerDeadline = null;
+    }
+
+    return this.prisma.extended.campaign.create({ data });
   }
 
   async findAll(user: ActiveUserData) {
@@ -83,13 +90,18 @@ export class CampaignsService {
   async update(id: string, updateDto: UpdateCampaignDto, user: ActiveUserData) {
     await this.validateUserAccess(user, id);
 
+    const data: any = { ...updateDto };
+
+    // Ajuste de data (Prisma exige ISO format se for string)
+    if (data.offerDeadline && typeof data.offerDeadline === 'string' && data.offerDeadline.length === 10) {
+      data.offerDeadline = new Date(data.offerDeadline).toISOString();
+    } else if (data.offerDeadline === "") {
+      data.offerDeadline = null;
+    }
+
     return this.prisma.extended.campaign.update({
       where: { id },
-      data: {
-        ...updateDto,
-        // Se o usuário editou campos críticos, podemos voltar status se necessário
-        // status: CampaignStatus.DRAFT 
-      },
+      data,
     });
   }
 
