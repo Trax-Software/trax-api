@@ -4,6 +4,7 @@ import { LoggerModule } from 'nestjs-pino';
 import { envSchema } from './config/env.validation';
 import { DatabaseModule } from './database/database.module';
 import { IamModule } from './modules/iam/iam.module'; 
+import { AuditModule } from './modules/audit/audit.module';
 import { CampaignsModule } from './modules/campaigns/campaigns.module';
 import { AiModule } from './modules/ai/ai.module';
 import { SecurityModule } from './modules/security/security.module';
@@ -28,7 +29,8 @@ import { StorageModule } from './modules/storage/storage.module';
     }),
 
     DatabaseModule,
-    IamModule, 
+    IamModule,
+    AuditModule,
     CampaignsModule,
     AiModule,
     SecurityModule,

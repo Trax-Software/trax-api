@@ -230,3 +230,23 @@ model Integration {
   @@index([deletedAt])
   @@map("integrations")
 }
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  entityType  String   // ex: "CAMPAIGN", "USER"
+  entityId    String   // ID do registro afetado
+  action      String   // "CREATE", "UPDATE", "DELETE"
+  
+  oldData     Json?    // Estado anterior (antes do update/delete)
+  newData     Json?    // Novo estado (após create/update)
+  
+  workspaceId String
+  userId      String   // Ator da ação
+  
+  createdAt   DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([workspaceId])
+  @@index([userId])
+  @@map("audit_logs")
+}

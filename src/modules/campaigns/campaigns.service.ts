@@ -8,10 +8,14 @@ import { PrismaService } from '../../database/prisma.service';
 import { CreateCampaignDto } from './dto/create-campaign.dto';
 import { UpdateCampaignDto } from './dto/update-campaign.dto';
 import { ActiveUserData } from '../iam/authentication/decorators/active-user.decorator';
+import { AuditService } from '../audit/audit.service';
 
 @Injectable()
 export class CampaignsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   // Helper privado para validar acesso ao workspace
   private async validateUserAccess(user: ActiveUserData, campaignId?: string) {
@@ -36,8 +40,6 @@ export class CampaignsService {
 
   async create(createCampaignDto: CreateCampaignDto, user: ActiveUserData) {
     const workspaceIds = await this.validateUserAccess(user);
-    // Por padrão, cria no primeiro workspace do usuário (MVP)
-    // No futuro, o DTO pode receber o workspaceId se o usuário tiver múltiplos
     const targetWorkspaceId = Array.isArray(workspaceIds) ? workspaceIds[0] : null;
 
     if (!targetWorkspaceId) throw new ForbiddenException('Workspace inválido');
@@ -49,14 +51,25 @@ export class CampaignsService {
       status: CampaignStatus.DRAFT,
     };
 
-    // Ajuste de data (Prisma exige ISO format se for string)
     if (data.offerDeadline && typeof data.offerDeadline === 'string' && data.offerDeadline.length === 10) {
       data.offerDeadline = new Date(data.offerDeadline).toISOString();
     } else if (data.offerDeadline === "") {
       data.offerDeadline = null;
     }
 
-    return this.prisma.extended.campaign.create({ data });
+    const campaign = await this.prisma.extended.campaign.create({ data });
+
+    // 📝 LOG: Criação
+    await this.audit.log({
+      entityType: 'CAMPAIGN',
+      entityId: campaign.id,
+      action: 'CREATE',
+      userId: user.sub,
+      workspaceId: targetWorkspaceId,
+      newData: campaign,
+    });
+
+    return campaign;
   }
 
   async findAll(user: ActiveUserData) {
@@ -88,29 +101,52 @@ export class CampaignsService {
   }
 
   async update(id: string, updateDto: UpdateCampaignDto, user: ActiveUserData) {
-    await this.validateUserAccess(user, id);
+    const oldCampaign = await this.validateUserAccess(user, id);
 
     const data: any = { ...updateDto };
 
-    // Ajuste de data (Prisma exige ISO format se for string)
     if (data.offerDeadline && typeof data.offerDeadline === 'string' && data.offerDeadline.length === 10) {
       data.offerDeadline = new Date(data.offerDeadline).toISOString();
     } else if (data.offerDeadline === "") {
       data.offerDeadline = null;
     }
 
-    return this.prisma.extended.campaign.update({
+    const updatedCampaign = await this.prisma.extended.campaign.update({
       where: { id },
       data,
     });
+
+    // 📝 LOG: Atualização
+    await this.audit.log({
+      entityType: 'CAMPAIGN',
+      entityId: id,
+      action: 'UPDATE',
+      userId: user.sub,
+      workspaceId: updatedCampaign.workspaceId,
+      oldData: oldCampaign,
+      newData: updatedCampaign,
+    });
+
+    return updatedCampaign;
   }
 
-  // ✅ NOVO: Delete Seguro (Soft Delete via Extension)
   async remove(id: string, user: ActiveUserData) {
-    await this.validateUserAccess(user, id);
+    const campaign: any = await this.validateUserAccess(user, id);
 
-    return this.prisma.extended.campaign.delete({
+    const result = await this.prisma.extended.campaign.delete({
       where: { id },
     });
+
+    // 📝 LOG: Remoção (Soft Delete)
+    await this.audit.log({
+      entityType: 'CAMPAIGN',
+      entityId: id,
+      action: 'DELETE',
+      userId: user.sub,
+      workspaceId: campaign.workspaceId,
+      oldData: campaign,
+    });
+
+    return result;
   }
 }
