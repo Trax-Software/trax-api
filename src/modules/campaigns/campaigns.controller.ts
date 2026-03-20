@@ -81,4 +81,14 @@ export class CampaignsController {
   ) {
     return this.aiService.generateStrategyOptions(id, user);
   }
+
+  @Post(':id/generate-copy')
+  @ApiOperation({ summary: '🆕 Gerar 3 opções completas de copy (Headlines + Texto + CTA)' })
+  @ApiResponse({ status: 200, description: 'Retorna 3 opções de copy usando frameworks AIDA, PAS e FAB' })
+  async generateCopyOptions(
+    @Param('id', ParseUUIDPipe) id: string,
+    @ActiveUser() user: ActiveUserData
+  ) {
+    return this.aiService.generateCopyCampaignOptions(id, user);
+  }
 }

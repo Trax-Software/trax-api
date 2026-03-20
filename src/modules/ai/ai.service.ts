@@ -269,4 +269,133 @@ export class AiService {
       };
     }
   }
+
+  /**
+   * Gera 3 Opções Completas de Copy (Novo Fluxo Simplificado)
+   * ✅ Usa frameworks de marketing (AIDA, PAS, FAB)
+   * ✅ Gera Headlines + Primary Text + CTA
+   * ✅ Brand DNA integrado
+   */
+  async generateCopyCampaignOptions(campaignId: string, user: ActiveUserData) {
+    const campaign = await this.prisma.campaign.findUnique({
+      where: { id: campaignId },
+      include: { workspace: true }
+    });
+    if (!campaign) throw new NotFoundException('Campanha não encontrada');
+
+    // A. Verifica Saldo
+    await this.ensureBalance(campaign.workspaceId, this.COSTS.MIN_TOKEN_BALANCE);
+
+    // B. Prepara Prompt Avançado com Frameworks de Marketing
+    const systemPrompt = await this.buildSystemPrompt(campaign.workspaceId);
+    
+    const userPrompt = `
+CONTEXTO DA CAMPANHA:
+- Produto/Serviço: "${campaign.productName || campaign.name}"
+- Objetivo: ${campaign.objective} (${this.getObjectiveDescription(campaign.objective)})
+- Público-Alvo: ${campaign.targetAudience || 'Público geral'}
+- Diferencial (USP): ${campaign.productUsp || 'A definir'}
+- Preço: ${campaign.productPrice ? `R$ ${campaign.productPrice}` : 'Não informado'}
+- URL: ${campaign.productUrl || 'Não informado'}
+
+TAREFA:
+Você é um copywriter sênior especializado em marketing de performance. Crie 3 OPÇÕES COMPLETAS de copy para anúncios digitais, cada uma usando um framework diferente de persuasão:
+
+OPÇÃO 1: Framework AIDA (Atenção → Interesse → Desejo → Ação)
+OPÇÃO 2: Framework PAS (Problema → Agitação → Solução)
+OPÇÃO 3: Framework FAB (Features → Advantages → Benefits)
+
+Para cada opção, gere:
+1. **headline**: Uma headline impactante (máx 40 caracteres)
+2. **primaryText**: Texto principal persuasivo (100-150 palavras)
+3. **cta**: Call-to-action claro e direto
+4. **framework**: Nome do framework usado
+5. **reasoning**: Breve explicação de por que essa abordagem funciona para este público
+
+REGRAS IMPORTANTES:
+- Use gatilhos mentais (escassez, prova social, autoridade, urgência)
+- Foque nos BENEFÍCIOS, não apenas nas features
+- Adapte o tom de voz ao público-alvo
+- Seja específico e evite clichês genéricos
+- Inclua números e dados quando possível
+
+FORMATO DE SAÍDA (JSON Array):
+[
+  {
+    "headline": "...",
+    "primaryText": "...",
+    "cta": "...",
+    "framework": "AIDA",
+    "reasoning": "..."
+  },
+  {
+    "headline": "...",
+    "primaryText": "...",
+    "cta": "...",
+    "framework": "PAS",
+    "reasoning": "..."
+  },
+  {
+    "headline": "...",
+    "primaryText": "...",
+    "cta": "...",
+    "framework": "FAB",
+    "reasoning": "..."
+  }
+]
+
+Retorne APENAS o JSON, sem markdown ou explicações adicionais.
+    `;
+
+    const finalPrompt = `${systemPrompt}\n\n${userPrompt}`;
+
+    // C. Gera com IA
+    const response = await this.aiProvider.generateText(finalPrompt, { 
+      temperature: 0.8, // Mais criatividade para copy
+      maxTokens: 3000 
+    });
+
+    // D. Cobra Custo Real
+    const totalTokens = response.usage.totalTokens;
+    await this.deductUsage(campaign.workspaceId, totalTokens);
+
+    // E. Processa JSON e Loga
+    const cleanJson = response.content.replace(/```json|```/g, '').trim();
+    
+    try {
+      const copyOptions = JSON.parse(cleanJson);
+      
+      await this.prisma.aiLog.create({
+        data: {
+          userId: user.sub,
+          workspaceId: campaign.workspaceId,
+          provider: 'GEMINI',
+          model: 'gemini-2.0-flash',
+          type: 'COPY_GENERATION',
+          inputTokens: response.usage.inputTokens,
+          outputTokens: response.usage.outputTokens,
+          totalTokens: totalTokens,
+        },
+      });
+
+      return copyOptions;
+    } catch (e) {
+      this.logger.error('Erro de Parse JSON IA (Copy Options)', e);
+      return { 
+        error: 'A IA gerou uma resposta, mas o formato JSON falhou.', 
+        rawContent: response.content 
+      };
+    }
+  }
+
+  // Helper para descrições de objetivos
+  private getObjectiveDescription(objective: string): string {
+    const map: Record<string, string> = {
+      AWARENESS: 'Aumentar visibilidade e reconhecimento da marca',
+      TRAFFIC: 'Atrair visitantes qualificados para o site',
+      SALES: 'Converter em vendas diretas',
+      LEADS: 'Captar contatos qualificados para nutrição',
+    };
+    return map[objective] || objective;
+  }
 }
