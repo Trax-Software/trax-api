@@ -1,8 +1,11 @@
-import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Post, UseGuards } from '@nestjs/common';
 import { AuthenticationService } from './authentication.service';
 import { SignUpDto } from './dto/sign-up.dto';
 import { SignInDto } from './dto/sign-in.dto';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { ActiveUser, AuthUserPayload } from './decorators/active-user.decorator';
+import { MeDto } from './dto/me.dto';
 
 @ApiTags('Autenticação')
 @Controller('auth')
@@ -24,5 +27,16 @@ export class AuthenticationController {
   @ApiResponse({ status: 401, description: 'Credenciais inválidas' })
   async signIn(@Body() signInDto: SignInDto) {
     return this.authService.signIn(signInDto);
+  }
+
+  @Get('me')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Retornar usuário autenticado e workspace atual' })
+  @ApiResponse({ status: 200, description: 'Perfil autenticado', type: MeDto })
+  @ApiResponse({ status: 401, description: 'Usuário não encontrado.' })
+  @ApiResponse({ status: 403, description: 'Usuário sem workspace.' })
+  async me(@ActiveUser() user: AuthUserPayload) {
+    return this.authService.me(user);
   }
 }

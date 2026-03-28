@@ -91,4 +91,15 @@ export class CampaignsController {
   ) {
     return this.aiService.generateCopyCampaignOptions(id, user);
   }
+
+  @Post(':id/publish/meta')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Publicar campanha no Meta Ads (MVP)' })
+  @ApiResponse({ status: 200, description: 'Campanha publicada com sucesso no Meta Ads' })
+  publishToMeta(
+    @Param('id', ParseUUIDPipe) id: string,
+    @ActiveUser() user: ActiveUserData,
+  ) {
+    return this.campaignsService.publishToMeta(id, user);
+  }
 }

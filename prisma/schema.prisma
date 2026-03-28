@@ -81,6 +81,10 @@ model Workspace {
   // Adicione este campo se formos implementar o sistema de créditos do Card 3 depois
   credits Int @default(10000)
 
+  // Seleção persistida da integração Meta (workspace-level)
+  metaAdAccountId String?
+  metaPageId      String?
+
   @@map("workspaces")
 }
 
@@ -142,6 +146,10 @@ model Campaign {
 
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  // IDs retornados pelo Meta Ads após publicação
+  metaCampaignId String?
+  metaAdSetId    String?
 
   createdBy String
   createdAt DateTime  @default(now())

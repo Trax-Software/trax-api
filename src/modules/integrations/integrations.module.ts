@@ -7,5 +7,6 @@ import { IntegrationsController } from './integrations.controller';
   imports: [HttpModule], // O SecurityModule e DatabaseModule são globais, não precisa importar aqui
   controllers: [IntegrationsController],
   providers: [IntegrationsService],
+  exports: [IntegrationsService],
 })
 export class IntegrationsModule {}

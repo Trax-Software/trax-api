@@ -1,0 +1,37 @@
+@baseUrl = http://localhost:3000/v1
+@email = admin@trax.com
+@password = password123
+@campaignId = 00000000-0000-0000-0000-000000000000
+
+### 1) Sign In
+# @name signIn
+POST {{baseUrl}}/auth/sign-in
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "password": "{{password}}"
+}
+
+### 2) Connect Meta (placeholder code from Meta OAuth callback)
+POST {{baseUrl}}/integrations/meta/connect
+Content-Type: application/json
+Authorization: Bearer {{signIn.response.body.data.accessToken}}
+
+{
+  "code": "META_OAUTH_CODE_AQUI"
+}
+
+### 3) Save selected ad account + page
+POST {{baseUrl}}/integrations/meta/select
+Content-Type: application/json
+Authorization: Bearer {{signIn.response.body.data.accessToken}}
+
+{
+  "adAccountId": "act_1234567890",
+  "pageId": "123456789012345"
+}
+
+### 4) Publish campaign to Meta
+POST {{baseUrl}}/campaigns/{{campaignId}}/publish/meta
+Authorization: Bearer {{signIn.response.body.data.accessToken}}

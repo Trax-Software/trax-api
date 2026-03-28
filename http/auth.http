@@ -1,0 +1,18 @@
+@baseUrl = http://localhost:3000/v1
+@email = admin@trax.com
+@password = password123
+
+### Sign In
+# @name signIn
+POST {{baseUrl}}/auth/sign-in
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "password": "{{password}}"
+}
+
+### Auth Me (usando token retornado no Sign In)
+GET {{baseUrl}}/auth/me
+Authorization: Bearer {{signIn.response.body.data.accessToken}}
+

@@ -1,4 +1,5 @@
 import { 
+  BadRequestException,
   Injectable, 
   NotFoundException, 
   ForbiddenException 
@@ -9,12 +10,14 @@ import { CreateCampaignDto } from './dto/create-campaign.dto';
 import { UpdateCampaignDto } from './dto/update-campaign.dto';
 import { ActiveUserData } from '../iam/authentication/decorators/active-user.decorator';
 import { AuditService } from '../audit/audit.service';
+import { IntegrationsService } from '../integrations/integrations.service';
 
 @Injectable()
 export class CampaignsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly integrationsService: IntegrationsService,
   ) {}
 
   // Helper privado para validar acesso ao workspace
@@ -148,5 +151,102 @@ export class CampaignsService {
     });
 
     return result;
+  }
+
+  async publishToMeta(id: string, user: ActiveUserData) {
+    const campaign = await this.prisma.extended.campaign.findFirst({
+      where: {
+        id,
+        workspace: { members: { some: { userId: user.sub } } },
+      },
+      include: {
+        adCreatives: true,
+        workspace: {
+          select: {
+            id: true,
+            metaAdAccountId: true,
+            metaPageId: true,
+          },
+        },
+      },
+    });
+
+    if (!campaign) {
+      throw new NotFoundException('Campanha não encontrada');
+    }
+
+    const metaStatus = await this.integrationsService.getMetaStatus(user);
+    if (!metaStatus.connected) {
+      throw new BadRequestException('Nenhuma conta do Facebook conectada.');
+    }
+
+    if (!campaign.workspace.metaAdAccountId || !campaign.workspace.metaPageId) {
+      throw new BadRequestException('Selecione conta de anúncio e página antes de publicar.');
+    }
+
+    const selectedCreative =
+      campaign.adCreatives.find((c) => c.isSelected && !!c.imageUrl) ||
+      campaign.adCreatives.find((c) => !!c.imageUrl);
+
+    if (!selectedCreative?.imageUrl) {
+      throw new BadRequestException('Campanha não possui criativo com imagem para publicar.');
+    }
+
+    const primaryText = selectedCreative.primaryText || campaign.description || null;
+    if (!primaryText) {
+      throw new BadRequestException('Campanha não possui texto principal para publicar no Meta.');
+    }
+
+    const publishResult = await this.integrationsService.publishCampaignToMeta({
+      workspaceId: campaign.workspace.id,
+      adAccountId: campaign.workspace.metaAdAccountId,
+      pageId: campaign.workspace.metaPageId,
+      campaign: {
+        id: campaign.id,
+        name: campaign.name,
+        objective: campaign.objective,
+        description: campaign.description,
+        budgetDaily: campaign.budgetDaily,
+        budgetTotal: campaign.budgetTotal,
+        ctaText: campaign.ctaText,
+        productUrl: campaign.productUrl,
+      },
+      creative: {
+        id: selectedCreative.id,
+        imageUrl: selectedCreative.imageUrl,
+        headline: selectedCreative.headline,
+        primaryText: primaryText,
+      },
+    });
+
+    const updatedCampaign = await this.prisma.extended.campaign.update({
+      where: { id: campaign.id },
+      data: {
+        status: CampaignStatus.PUBLISHED,
+        metaCampaignId: publishResult.metaCampaignId,
+        metaAdSetId: publishResult.metaAdSetId,
+      },
+    });
+
+    await this.prisma.extended.adCreative.update({
+      where: { id: selectedCreative.id },
+      data: {
+        facebookAdId: publishResult.metaAdId,
+        headline: publishResult.headline,
+        primaryText: publishResult.primaryText,
+        isSelected: true,
+      },
+    });
+
+    return {
+      message: 'Campanha publicada no Meta Ads com sucesso.',
+      ids: {
+        metaCampaignId: publishResult.metaCampaignId,
+        metaAdSetId: publishResult.metaAdSetId,
+        metaCreativeId: publishResult.metaCreativeId,
+        metaAdId: publishResult.metaAdId,
+      },
+      campaign: updatedCampaign,
+    };
   }
 }

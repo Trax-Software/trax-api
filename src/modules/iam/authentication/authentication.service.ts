@@ -1,5 +1,6 @@
 import { 
     ConflictException, 
+    ForbiddenException,
     Injectable, 
     UnauthorizedException 
   } from '@nestjs/common';
@@ -9,6 +10,8 @@ import {
   import { SignUpDto } from './dto/sign-up.dto';
   import { SignInDto } from './dto/sign-in.dto';
   import { Role } from '@prisma/client';
+  import { AuthUserPayload } from './decorators/active-user.decorator';
+  import { MeDto } from './dto/me.dto';
   
   @Injectable()
   export class AuthenticationService {
@@ -70,6 +73,64 @@ import {
       }
   
       return this.generateTokens(user);
+    }
+
+    async me(authUser: AuthUserPayload): Promise<MeDto> {
+      const userById = await this.prisma.extended.user.findFirst({
+        where: { id: authUser.sub },
+        select: { id: true, email: true, name: true },
+      });
+
+      const user =
+        userById ||
+        (await this.prisma.extended.user.findFirst({
+          where: { email: authUser.email },
+          select: { id: true, email: true, name: true },
+        }));
+
+      if (!user) {
+        throw new UnauthorizedException('Usuário não encontrado.');
+      }
+
+      // Se houver múltiplos vínculos, usamos o primeiro por ordem de criação (MVP atual).
+      const membership = await this.prisma.extended.workspaceMember.findFirst({
+        where: { userId: user.id },
+        orderBy: { createdAt: 'asc' },
+        select: {
+          role: true,
+          workspace: {
+            select: {
+              id: true,
+              name: true,
+              credits: true,
+              metaAdAccountId: true,
+              metaPageId: true,
+            },
+          },
+        },
+      });
+
+      if (!membership) {
+        throw new ForbiddenException('Usuário sem workspace.');
+      }
+
+      return {
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+        },
+        membership: {
+          role: membership.role,
+        },
+        workspace: {
+          id: membership.workspace.id,
+          name: membership.workspace.name,
+          credits: membership.workspace.credits,
+          metaAdAccountId: membership.workspace.metaAdAccountId,
+          metaPageId: membership.workspace.metaPageId,
+        },
+      };
     }
   
     private async generateTokens(user: { id: string; email: string }) {

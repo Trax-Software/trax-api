@@ -3,6 +3,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody, ApiResponse } from '@nes
 import { IntegrationsService } from './integrations.service';
 import { JwtAuthGuard } from '../iam/authentication/guards/jwt-auth.guard';
 import { ActiveUser, ActiveUserData } from '../iam/authentication/decorators/active-user.decorator';
+import { MetaSelectDto } from './dto/meta-select.dto';
 
 @ApiTags('Integrações (Facebook/Meta)')
 @Controller('integrations')
@@ -52,5 +53,24 @@ export class IntegrationsController {
   @ApiResponse({ status: 200, description: 'Lista de páginas retornada.' })
   getPages(@ActiveUser() user: ActiveUserData) {
     return this.integrationsService.getPages(user);
+  }
+
+  @Get('meta/status')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Status da conexão Meta e seleção atual do workspace' })
+  getMetaStatus(@ActiveUser() user: ActiveUserData) {
+    return this.integrationsService.getMetaStatus(user);
+  }
+
+  @Post('meta/select')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Salvar conta de anúncio e página selecionadas no workspace' })
+  saveMetaSelection(
+    @Body() dto: MetaSelectDto,
+    @ActiveUser() user: ActiveUserData,
+  ) {
+    return this.integrationsService.saveMetaSelection(dto, user);
   }
 }
